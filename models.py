@@ -211,6 +211,7 @@ def get_student_attendance(course_code):
         {'$project': {
             '_id': 0,
             'student_name': '$student_info.name',
+            'student_id': '$student_info.school_id',
             'attendance_count': 1,
             'total_sessions': '$sessions.total_sessions',
             'attendance_percentage': {

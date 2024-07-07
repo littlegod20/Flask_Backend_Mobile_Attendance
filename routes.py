@@ -25,7 +25,7 @@ def login():
 @jwt_required()
 def manage_session():
     return manage_session_controller()
-
+ 
 # student route for taking attendance
 @main.route('/attendance', methods=['POST'])
 @jwt_required()
