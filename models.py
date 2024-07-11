@@ -1,6 +1,7 @@
 from flask import current_app
 from bson import ObjectId
 from datetime import datetime, timezone
+from geopy.distance import geodesic
 
 def get_mongo():
     if 'pymongo' not in current_app.extensions:
@@ -82,26 +83,46 @@ def create_user(data):
     user_id = users.insert_one(user_data).inserted_id
     return user_id
 
-def open_session(user_id, course_code, course_name):
+def open_session(user_id, course_code, course_name, location):
     get_mongo().db.sessions.insert_one({
         'lecturer_id': ObjectId(user_id),
         'course_code': course_code,
         'course_name': course_name,
         'timestamp': datetime.now(timezone.utc),
+        'location': location,
         'active': True
     })
 
-def close_session(user_id, course_code, course_name):
+def close_session(user_id, course_code, course_name, location):
     get_mongo().db.sessions.update_one(
         {
             'lecturer_id': ObjectId(user_id),
             'course_code': course_code,
             'course_name': course_name,
+            'location': location,
             'active': True
         },
         {
             '$set': {'active': False, 'end_time': datetime.now(timezone.utc)}
         }
+    )
+
+def set_lecturer_location(user_id, location):
+    get_mongo().db.users.update_one(
+        {'_id': ObjectId(user_id)},
+        {'$set': {'location': location}}
+    )
+
+def get_lecturer_location(course_code): 
+    session = get_mongo().db.sessions.find_one({'course_code':course_code, 'active': True})
+    if session: 
+        return session['location']
+    return None
+
+def set_student_location(user_id, location):
+    get_mongo().db.users.update_one(
+        {'_id': ObjectId(user_id)},
+        {'$set': {'location': location}}
     )
 
 def is_session_active(course_code):
@@ -235,3 +256,8 @@ def get_session_status(course_code):
         {'_id': False, 'active': True}
     )
     return 'open' if session else 'closed'
+
+
+def calculate_distance(location1, location2):
+    # location and location2 should be tuples like (latitude, longitude)
+    return geodesic(location1, location2).meters
