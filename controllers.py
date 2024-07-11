@@ -1,8 +1,9 @@
-from flask import request, jsonify
+from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance)
+import logging, ast, json
 
 def index_controller():
     user_id = get_jwt_identity()
@@ -53,14 +54,26 @@ def manage_session_controller():
     course_code = request.json.get('course_code')
     action = request.json.get('action')
     course_name = request.json.get('course_name')
+    location = request.json.get('location'),
     if action == 'open':
-        open_session(user_id, course_code, course_name)
+        open_session(user_id, course_code, course_name, location)
         return jsonify({"msg": "Session opened successfully"}), 200
     elif action == 'close':
-        close_session(user_id, course_code, course_name)
+        close_session(user_id, course_code, course_name, location)
         return jsonify({"msg": "Session closed successfully"}), 200
     else:
         return jsonify({"msg": "Invalid action"}), 400
+    
+
+def set_lecturer_location_controller():
+    user_id = get_jwt_identity()
+    user = get_user(user_id)
+    if user['role'] != 'lecturer':
+        return jsonify({"msg": "Unauthorized"}), 403
+    location = request.json.get('location')
+    set_lecturer_location(user_id, location)
+    return jsonify({"msg": "Lecturer location updated successfully"}), 200
+
 
 def check_attendance_controller():
     user_id = get_jwt_identity()
@@ -72,8 +85,29 @@ def check_attendance_controller():
     location = request.json.get('location')
     if not is_session_active(course_code):
         return jsonify({"msg": "No active session for this course"}), 400
-    record_attendance(user_id, course_code,course_name, location)
-    return jsonify({"msg": "Attendance recorded successfully"}), 200
+    
+    lecturer_location = get_lecturer_location(course_code)
+    if lecturer_location:
+        distance = calculate_distance(lecturer_location, location)
+        print('student:',location, '\nLecturer:',lecturer_location)
+        if distance <= 100: 
+            record_attendance(user_id, course_code, course_name, location)
+            return jsonify({"msg": "Attendance recorded successfully"}), 200
+        else:
+            return jsonify({"msg": "You are not within the required location"}), 200
+    else: 
+        return jsonify({"msg": "Lecturer location not set"}), 400
+
+
+def set_student_location_controller():
+    user_id = get_jwt_identity()
+    user = get_user(user_id)
+    if user['role'] != 'student':
+        return jsonify({"msg": "Unauthorized"}), 403
+    location = request.json.get('location')
+    set_student_location(user_id, location)
+    return jsonify({"msg": "Student location updated successfully"}), 200
+
 
 def get_student_attendance_controller():
     user_id = get_jwt_identity()
@@ -83,7 +117,7 @@ def get_student_attendance_controller():
     course_code = request.args.get('course_code')
     weekly_attendance = get_weekly_attendance(user_id, course_code)
     return jsonify(weekly_attendance)
-
+ 
 def get_lecturer_attendance_controller():
     user_id = get_jwt_identity()
     user = get_user(user_id)
@@ -113,7 +147,7 @@ def get_student_courses_controller():
             else: 
                 course['session_status'] = 'unknown'
     return jsonify(courses)
-
+ 
 
 
 def get_lecturer_courses_controller():
