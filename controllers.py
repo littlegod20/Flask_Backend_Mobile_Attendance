@@ -1,8 +1,9 @@
-from flask import request, jsonify
+from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
 from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance)
+import logging, ast, json
 
 def index_controller():
     user_id = get_jwt_identity()
@@ -88,11 +89,12 @@ def check_attendance_controller():
     lecturer_location = get_lecturer_location(course_code)
     if lecturer_location:
         distance = calculate_distance(lecturer_location, location)
-        if distance <= 100: # 100 meters is an example distance for geofencing
+        print('student:',location, '\nLecturer:',lecturer_location)
+        if distance <= 100: 
             record_attendance(user_id, course_code, course_name, location)
             return jsonify({"msg": "Attendance recorded successfully"}), 200
         else:
-            return jsonify({"msg": "You are not within the required location"}), 400
+            return jsonify({"msg": "You are not within the required location"}), 200
     else: 
         return jsonify({"msg": "Lecturer location not set"}), 400
 

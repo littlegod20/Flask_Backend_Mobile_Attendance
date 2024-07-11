@@ -1,3 +1,4 @@
+import json
 from flask import current_app
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -110,13 +111,13 @@ def close_session(user_id, course_code, course_name, location):
 def set_lecturer_location(user_id, location):
     get_mongo().db.users.update_one(
         {'_id': ObjectId(user_id)},
-        {'$set': {'location': location}}
+        {'$set': {'location': json.dumps(location)}}
     )
 
 def get_lecturer_location(course_code): 
     session = get_mongo().db.sessions.find_one({'course_code':course_code, 'active': True})
     if session: 
-        return session['location']
+        return session['location'][0]
     return None
 
 def set_student_location(user_id, location):
@@ -260,4 +261,6 @@ def get_session_status(course_code):
 
 def calculate_distance(location1, location2):
     # location and location2 should be tuples like (latitude, longitude)
-    return geodesic(location1, location2).meters
+    tuple1 = tuple(location1.values())
+    tuple2 = tuple(location2.values())
+    return geodesic(tuple1, tuple2)
