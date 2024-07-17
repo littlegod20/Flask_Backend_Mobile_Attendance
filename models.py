@@ -188,14 +188,33 @@ def set_student_location(user_id, location):
 def is_session_active(course_code):
     return get_mongo().db.sessions.find_one({'course_code': course_code, 'active': True}) is not None
 
-def record_attendance(user_id, course_code,course_name, location):
+def record_attendance(user_id, course_code,course_name, location, attendance_checked):
+
+    # Get the current active session for this course
+    session = get_mongo().db.sessions.find_one({
+        'course_code': course_code,
+        'active': True
+    })
+
+    if not session:
+        raise ValueError("No active session for this course")
+
+    # Record attendance
     get_mongo().db.attendance.insert_one({
         'student_id': ObjectId(user_id),
         'course_code': course_code,
         'course_name': course_name,
+        'session_id': session['_id'], # Linking the attendance to the specific session
         'timestamp': datetime.now(timezone.utc),
-        'location': location
+        'location': location,
+        'attendance_checked': attendance_checked
     })
+
+     # Update the student's course data
+    get_mongo().db.student_courses.update_one(
+        {'student_id': ObjectId(user_id), 'courses.course_code': course_code},
+        {'$set': {'courses.$.attendance_checked': attendance_checked}}
+    )
 
 def get_weekly_attendance(user_id, course_code):
     semester_start_date = datetime(2024, 5, 12)
@@ -316,6 +335,42 @@ def get_session_status(course_code):
         {'_id': False, 'active': True}
     )
     return 'open' if session else 'closed'
+
+# def get_attendance_checked(course_code, user_id):
+#     # Find the current active session for this course
+#     session = get_mongo().db.sessions.find_one({
+#         'course_code': course_code,
+#         'active': True
+#     })
+
+#     if not session:
+#         return False # No active session, so attendance can't be checked
+
+#     # Checking if there's an attendance record for this usser in this session
+#     attendance = get_mongo().db.attendance.find_one(
+#         {'course_code': course_code, 'student':ObjectId(user_id), 'session_id':session['_id']},
+#     )
+#     return bool(attendance)
+
+
+def check_attendance_status(user_id, course_code):
+    # Find the current active session for this course
+    session = get_mongo().db.sessions.find_one({
+        'course_code': course_code,
+        'active': True
+    })
+
+    if not session:
+        return False  # No active session, so attendance can't be checked
+
+    # Check if there's an attendance record for this user in this session
+    attendance = get_mongo().db.attendance.find_one({
+        'student_id': ObjectId(user_id),
+        'course_code': course_code,
+        'session_id': session['_id']
+    })
+
+    return bool(attendance)
 
 
 def calculate_distance(location1, location2):
