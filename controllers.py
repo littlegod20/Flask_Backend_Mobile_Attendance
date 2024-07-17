@@ -2,7 +2,7 @@ from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status)
 
 
 def index_controller():
@@ -83,15 +83,20 @@ def check_attendance_controller():
     course_code = request.json.get('course_code')
     course_name = request.json.get('course_name')
     location = request.json.get('location')
+    attendance_checked = request.json.get('attendance_checked', False)
+
     if not is_session_active(course_code):
         return jsonify({"msg": "No active session for this course"}), 400
+    
+    # if get_attendance_checked(course_code, user_id):
+    #     return jsonify({"msg": "Attendance already recorded for this session"}),
     
     lecturer_location = get_lecturer_location(course_code)
     if lecturer_location:
         distance = calculate_distance(lecturer_location, location)
         print('student:',location, '\nLecturer:',lecturer_location)
         if distance <= 100: 
-            record_attendance(user_id, course_code, course_name, location)
+            record_attendance(user_id, course_code, course_name, location, attendance_checked)
             return jsonify({"msg": "Attendance recorded successfully"}), 200
         else:
             return jsonify({"msg": "You are not within the required location"}), 200
@@ -144,8 +149,15 @@ def get_student_courses_controller():
             if course:
                 session_status = get_session_status(course['course_code'])
                 course['session_status'] = session_status
+                if session_status == 'open':
+                    # Check if the student has already checked attendance for this session
+                    attendance_checked = check_attendance_status(user_id, course['course_code'])
+                    course['attendance_checked'] = attendance_checked
+                else:
+                    course['attendance_checked'] = False
             else: 
                 course['session_status'] = 'unknown'
+                course['attendance_checked'] = False
     return jsonify(courses)
  
 
