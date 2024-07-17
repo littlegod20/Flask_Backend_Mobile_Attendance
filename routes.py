@@ -67,3 +67,6 @@ def get_student_courses():
 @jwt_required()
 def get_lecturer_courses():
     return get_lecturer_courses_controller()
+
+
+# route to register image
