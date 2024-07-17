@@ -3,6 +3,13 @@ from flask import current_app
 from bson import ObjectId
 from datetime import datetime, timezone
 from geopy.distance import geodesic
+import cv2
+import numpy as np
+import dlib
+from scipy.spatial.distance import cosine
+from deepface import DeepFace
+from flask import jsonify
+
 
 def get_mongo():
     if 'pymongo' not in current_app.extensions:
@@ -50,39 +57,91 @@ def get_recent_checkins(user_id, seven_days_ago):
         }
     ).sort('timestamp', -1).limit(5))
 
+
+
+# Configure DeepFace
+model_name = 'VGG-Face'
+
+# Initialize dlib's face detector
+detector = dlib.get_frontal_face_detector()
+
+def preprocess_image(image):
+    # Convert to RGB
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    
+    # Detect faces
+    faces = detector(rgb_image)
+    
+    if len(faces) == 0:
+        return None
+    
+    # Get the first face
+    face = faces[0]
+    x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+    
+    # Crop the face
+    face = image[y:y+h, x:x+w]
+    
+    # Resize to a standard size (e.g., 224x224 for VGG-Face)
+    face = cv2.resize(face, (224, 224))
+    
+    return face
+
+def extract_features(face_img):
+    preprocessed_face = preprocess_image(face_img)
+    if preprocessed_face is None:
+        raise ValueError("No face detected in the image")
+    
+    result = DeepFace.represent(preprocessed_face, model_name=model_name, enforce_detection=False)
+    # The result is now a list of dictionaries, we'll take the first one
+    embedding = result[0]['embedding']
+    return embedding
+
+
 def create_user(data):
     users = get_mongo().db.users
     
-    name = data.get('name')
-    email = data.get('email')
-    password = data.get('password')
-    school_id = data.get('school_id')
-    role = data.get('role')
-    year = data.get('year')
-    faculty = data.get('faculty')
-    programme = data.get('programme')
+    if 'image' not in data.files:
+        return jsonify({"error": "No image file"})
     
-    if not email or not password or not role:
-        raise ValueError("Missing email or password, or role")
+    name = data.form.get('name')
+    email = data.form.get('email')
+    password = data.form.get('password')
+    school_id = data.form.get('school_id')
+    role = data.form.get('role')
+    year = data.form.get('year')
+    faculty = data.form.get('faculty')
+    programme = data.form.get('programme')
+    image = cv2.imdecode(np.frombuffer(data.files['image'].read(), np.uint8), cv2.IMREAD_COLOR)
+    
+    if not email or not password or not role or not year or not programme:
+        raise ValueError("Missing credentials, check your form inputs")
+    
     
     if users.find_one({'email': email}):
         raise ValueError("Email already exists")
     
     hashed_password = current_app.bcrypt.generate_password_hash(password).decode('utf-8')
     
-    user_data = {
-        'name': name,
-        'password': hashed_password,
-        'email': email,
-        'school_id': school_id,
-        'role': role,
-        'year': year or None,
-        'faculty': faculty,
-        'programme': programme
-    }
-    
-    user_id = users.insert_one(user_data).inserted_id
-    return user_id
+    try:
+        features =  extract_features(image)
+        user_data = {
+            'name': name,
+            'password': hashed_password,
+            'email': email,
+            'school_id': school_id,
+            'role': role,
+            'year': year or None,
+            'faculty': faculty,
+            'programme': programme,
+            "face_features": features
+        }
+        user_id = users.insert_one(user_data).inserted_id
+        return user_id
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"error": f'Failed to register face:{str(e)}'}), 400
 
 def open_session(user_id, course_code, course_name, location):
     get_mongo().db.sessions.insert_one({
