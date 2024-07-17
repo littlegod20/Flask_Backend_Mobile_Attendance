@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
 from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance)
-import logging, ast, json
+
 
 def index_controller():
     user_id = get_jwt_identity()
@@ -31,7 +31,7 @@ def index_controller():
 
 def register_controller():
     # Extract data from request
-    data = request.json
+    data = request
     # Create user
     user_id = create_user(data)
     return jsonify({"msg": "User created successfully", "user_id": str(user_id)}), 201
