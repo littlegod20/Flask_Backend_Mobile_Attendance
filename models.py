@@ -277,53 +277,168 @@ def get_weekly_attendance(user_id, course_code):
 
     return list(get_mongo().db.attendance.aggregate(pipeline))
 
+# def get_student_attendance(course_code):
+#     pipeline = [
+#         {'$match': {'course_code': course_code}},
+#         {'$group': {
+#             '_id': '$student_id',
+#             'attendance_count': {'$sum': 1}
+#         }},
+#         {'$lookup': {
+#             'from': 'users',
+#             'localField': '_id',
+#             'foreignField': '_id',
+#             'as': 'student_info'
+#         }},
+#         {'$unwind': '$student_info'},
+#         {'$lookup': {
+#             'from': 'sessions',
+#             'let': {'course_code': course_code},
+#             'pipeline': [
+#                 {'$match':
+#                     {'$expr':
+#                         {'$and': [
+#                             {'$eq': ['$course_code', '$$course_code']},
+#                             {'$eq': ['$active', False]}  # Only count closed sessions
+#                         ]}
+#                     }
+#                 },
+#                 {'$count': 'total_sessions'}
+#             ],
+#             'as': 'sessions'
+#         }},
+#         {'$unwind': '$sessions'},
+#         {'$project': {
+#             '_id': 0,
+#             'student_name': '$student_info.name',
+#             'student_id': '$student_info.school_id',
+#             'attendance_count': 1,
+#             'total_sessions': '$sessions.total_sessions',
+#             'attendance_percentage': {
+#                 '$multiply': [
+#                     {'$divide': ['$attendance_count', '$sessions.total_sessions']},
+#                     100
+#                 ]
+#             }
+#         }}
+#     ]
+    
+#     return list(get_mongo().db.attendance.aggregate(pipeline))
+
+
 def get_student_attendance(course_code):
     pipeline = [
-        {'$match': {'course_code': course_code}},
-        {'$group': {
-            '_id': '$student_id',
-            'attendance_count': {'$sum': 1}
-        }},
-        {'$lookup': {
-            'from': 'users',
-            'localField': '_id',
-            'foreignField': '_id',
-            'as': 'student_info'
-        }},
-        {'$unwind': '$student_info'},
-        {'$lookup': {
-            'from': 'sessions',
-            'let': {'course_code': course_code},
-            'pipeline': [
-                {'$match':
-                    {'$expr':
-                        {'$and': [
-                            {'$eq': ['$course_code', '$$course_code']},
-                            {'$eq': ['$active', False]}  # Only count closed sessions
-                        ]}
-                    }
-                },
-                {'$count': 'total_sessions'}
-            ],
-            'as': 'sessions'
-        }},
-        {'$unwind': '$sessions'},
-        {'$project': {
-            '_id': 0,
-            'student_name': '$student_info.name',
-            'student_id': '$student_info.school_id',
-            'attendance_count': 1,
-            'total_sessions': '$sessions.total_sessions',
-            'attendance_percentage': {
-                '$multiply': [
-                    {'$divide': ['$attendance_count', '$sessions.total_sessions']},
-                    100
-                ]
+        {
+            '$match': {
+                'courses.course_code': course_code
             }
-        }}
+        },
+        {
+            '$unwind': '$courses'
+        },
+        {
+            '$match': {
+                'courses.course_code': course_code
+            }
+        },
+        {
+            '$lookup': {
+                'from': 'users',
+                'let': {'programme': '$programme', 'year': '$year'},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$programme', '$$programme']},
+                                    {'$eq': ['$year', '$$year']},
+                                    {'$eq': ['$role', 'student']}
+                                ]
+                            }
+                        }
+                    }
+                ],
+                'as': 'student'
+            }
+        },
+        {
+            '$unwind': '$student'
+        },
+        {
+            '$lookup': {
+                'from': 'attendance',
+                'let': {'student_id': '$student._id', 'course_code': course_code},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$student_id', '$$student_id']},
+                                    {'$eq': ['$course_code', '$$course_code']}
+                                ]
+                            }
+                        }
+                    },
+                    {'$count': 'attendance_count'}
+                ],
+                'as': 'attendance'
+            }
+        },
+        {
+            '$lookup': {
+                'from': 'sessions',
+                'let': {'course_code': course_code},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$course_code', '$$course_code']},
+                                    {'$eq': ['$active', False]}  # Only count closed sessions
+                                ]
+                            }
+                        }
+                    },
+                    {'$count': 'total_sessions'}
+                ],
+                'as': 'sessions'
+            }
+        },
+        {
+            '$unwind': {
+                'path': '$sessions',
+                'preserveNullAndEmptyArrays': True
+            }
+        },
+        {
+            '$project': {
+                '_id': 0,
+                'student_name': '$student.name',
+                'student_id': '$student.school_id',
+                'attendance_count': {'$ifNull': [{'$arrayElemAt': ['$attendance.attendance_count', 0]}, 0]},
+                'total_sessions': {'$ifNull': ['$sessions.total_sessions', 0]},
+                'attendance_percentage': {
+                    '$cond': [
+                        {'$eq': [{'$ifNull': ['$sessions.total_sessions', 0]}, 0]},
+                        0,
+                        {
+                            '$multiply': [
+                                {
+                                    '$divide': [
+                                        {'$ifNull': [{'$arrayElemAt': ['$attendance.attendance_count', 0]}, 0]},
+                                        {'$ifNull': ['$sessions.total_sessions', 1]}
+                                    ]
+                                },
+                                100
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
     ]
-    
-    return list(get_mongo().db.attendance.aggregate(pipeline))
+   
+    return list(get_mongo().db.student_courses.aggregate(pipeline))
 
 def get_courses(collection, **kwargs):
     return list(get_mongo().db[collection].find(kwargs, {'_id': False}))
