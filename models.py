@@ -336,22 +336,6 @@ def get_session_status(course_code):
     )
     return 'open' if session else 'closed'
 
-# def get_attendance_checked(course_code, user_id):
-#     # Find the current active session for this course
-#     session = get_mongo().db.sessions.find_one({
-#         'course_code': course_code,
-#         'active': True
-#     })
-
-#     if not session:
-#         return False # No active session, so attendance can't be checked
-
-#     # Checking if there's an attendance record for this usser in this session
-#     attendance = get_mongo().db.attendance.find_one(
-#         {'course_code': course_code, 'student':ObjectId(user_id), 'session_id':session['_id']},
-#     )
-#     return bool(attendance)
-
 
 def check_attendance_status(user_id, course_code):
     # Find the current active session for this course
@@ -378,3 +362,95 @@ def calculate_distance(location1, location2):
     tuple1 = tuple(location1.values())
     tuple2 = tuple(location2.values())
     return geodesic(tuple1, tuple2)
+
+
+def get_recent_attendance(user_id):
+    # Define the semester start date
+    semester_start_date = datetime(2024, 5, 12) 
+
+    pipeline = [
+        {'$match': {'student_id': ObjectId(user_id)}},
+        {'$sort': {'timestamp': -1}},
+        {'$limit': 5},
+        {'$lookup': {
+            'from': 'student_courses',
+            'let': {'course_code': '$course_code'},
+            'pipeline': [
+                {'$match': {
+                    '$expr': {
+                        '$in': [
+                            '$$course_code',
+                            '$courses.course_code'
+                        ]
+                    }
+                }},
+                {'$unwind': '$courses'},
+                {'$match': {
+                    '$expr': {
+                        '$eq': ['$courses.course_code', '$$course_code']
+                    }
+                }}
+            ],
+            'as': 'course_info'
+        }},
+        {'$unwind': '$course_info'},
+        {'$lookup': {
+            'from': 'sessions',
+            'let': {'course_code': '$course_code'},
+            'pipeline': [
+                {'$match': {
+                    '$expr': {
+                        '$eq': ['$course_code', '$$course_code']
+                    }
+                }},
+                {'$count': 'total_sessions'}
+            ],
+            'as': 'session_info'
+        }},
+        {'$unwind': '$session_info'},
+        {'$group': {
+            '_id': '$course_code',
+            'courseName': {'$first': '$course_name'},
+            'programme': {'$first': '$course_info.programme'},
+            'year': {'$first': '$course_info.year'},
+            'credits': {'$first': '$course_info.courses.credits'},
+            'total_sessions': {'$first': '$session_info.total_sessions'},
+            'attended_sessions': {'$sum': 1},
+            'latest_timestamp': {'$max': '$timestamp'}
+        }},
+        {'$addFields': {
+            'week_of_semester': {
+                '$ceil': {
+                    '$divide': [
+                        {'$subtract': ['$latest_timestamp', semester_start_date]},
+                        1000 * 60 * 60 * 24 * 7  # milliseconds in a week
+                    ]
+                }
+            },
+            'attendance_fraction': {
+                '$divide': ['$attended_sessions', '$total_sessions']
+            }
+        }},
+        {'$project': {
+            '_id': 0,
+            'courseId': '$_id',
+            'courseName': 1,
+            'attendance': {
+                '$concat': [
+                    {'$toString': '$attended_sessions'},
+                    '/',
+                    {'$toString': '$total_sessions'}
+                ]
+            },
+            'attendanceFraction': '$attendance_fraction',
+            'timestamp': '$latest_timestamp',
+            'week': '$week_of_semester',
+            'programme': 1,
+            'year': 1,
+            'credits': 1,
+            'code':1
+        }},
+        {'$sort': {'timestamp': -1}}
+    ]
+    
+    return list(get_mongo().db.attendance.aggregate(pipeline))

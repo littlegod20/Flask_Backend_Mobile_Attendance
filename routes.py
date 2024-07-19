@@ -1,6 +1,6 @@
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
-from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, set_student_location_controller, set_lecturer_location_controller)
+from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, set_student_location_controller, set_lecturer_location_controller, get_recent_attendance_controller)
 
 main = Blueprint('main', __name__)
 
@@ -69,4 +69,8 @@ def get_lecturer_courses():
     return get_lecturer_courses_controller()
 
 
-# route to register image
+# route for recent attendance
+@main.route('/student/recent-attendance', methods=['GET'])
+@jwt_required()
+def get_recent_attendance():
+    return get_recent_attendance_controller()
