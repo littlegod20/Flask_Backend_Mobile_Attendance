@@ -2,7 +2,7 @@ from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance)
 
 
 def index_controller():
@@ -170,3 +170,13 @@ def get_lecturer_courses_controller():
     school_id = request.args.get('school_id')
     courses = get_courses('lecturer_courses', school_id=school_id)
     return jsonify(courses)
+
+
+def get_recent_attendance_controller():
+    user_id = get_jwt_identity()
+    user = get_user(user_id)
+    if user['role'] != "student":
+        return jsonify({"msg": "Unauthorized"}), 403
+    
+    recent_attendance = get_recent_attendance(user_id)
+    return jsonify(recent_attendance)
