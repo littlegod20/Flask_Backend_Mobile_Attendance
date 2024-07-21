@@ -2,7 +2,7 @@ from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance)
 
 
 def index_controller():
@@ -180,3 +180,24 @@ def get_recent_attendance_controller():
     
     recent_attendance = get_recent_attendance(user_id)
     return jsonify(recent_attendance)
+
+def get_overall_attendance_controller():
+    user_id = get_jwt_identity()
+    user = get_user(user_id)
+    if user['role'] != "lecturer":
+        return jsonify({"msg":"Unauthorized"}), 403
+    
+    school_id = request.args.get('school_id')
+    courses = get_courses('lecturer_courses', school_id=school_id)
+    inner_courses = courses[0]['assigned_courses']
+    if not courses:
+        return jsonify({"msg": "No courses found for this lecturer"}), 404
+    attendance = []
+    for course in inner_courses:
+        if course:
+            overall_attendance = get_overall_class_attendance(course['course_code'], course['course_name'])
+            if overall_attendance:
+                attendance.append(overall_attendance)
+        else:
+            return jsonify({"msg":"No overall attendance for this course"})
+    return jsonify(attendance)

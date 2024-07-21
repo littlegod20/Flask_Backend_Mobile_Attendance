@@ -520,3 +520,128 @@ def get_recent_attendance(user_id):
     ]
     
     return list(get_mongo().db.attendance.aggregate(pipeline))
+
+
+def get_overall_class_attendance(course_code, course_name):
+    pipeline = [
+        {
+            '$match': {
+                'courses.course_code': course_code
+            }
+        },
+        {
+            '$unwind': '$courses'
+        },
+        {
+            '$match': {
+                'courses.course_code': course_code
+            }
+        },
+        {
+            '$lookup': {
+                'from': 'users',
+                'let': {'programme': '$programme', 'year': '$year'},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$programme', '$$programme']},
+                                    {'$eq': ['$year', '$$year']},
+                                    {'$eq': ['$role', 'student']}
+                                ]
+                            }
+                        }
+                    }
+                ],
+                'as': 'students'
+            }
+        },
+        {
+            '$unwind': '$students'
+        },
+        {
+            '$lookup': {
+                'from': 'attendance',
+                'let': {'student_id': '$students._id', 'course_code': course_code},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$student_id', '$$student_id']},
+                                    {'$eq': ['$course_code', '$$course_code']}
+                                ]
+                            }
+                        }
+                    },
+                    {'$count': 'attendance_count'}
+                ],
+                'as': 'attendance'
+            }
+        },
+        {
+            '$lookup': {
+                'from': 'sessions',
+                'let': {'course_code': course_code},
+                'pipeline': [
+                    {
+                        '$match': {
+                            '$expr': {
+                                '$and': [
+                                    {'$eq': ['$course_code', '$$course_code']},
+                                    {'$eq': ['$active', False]}  # Only count closed sessions
+                                ]
+                            }
+                        }
+                    },
+                    {'$count': 'total_sessions'}
+                ],
+                'as': 'sessions'
+            }
+        },
+        {
+            '$unwind': {
+                'path': '$sessions',
+                'preserveNullAndEmptyArrays': True
+            }
+        },
+        {
+            '$group': {
+                '_id': None,
+                'total_students': {'$sum': 1},
+                'total_attendance': {'$sum': {'$ifNull': [{'$arrayElemAt': ['$attendance.attendance_count', 0]}, 0]}},
+                'total_sessions': {'$first': '$sessions.total_sessions'}
+            }
+        },
+        {
+            '$project': {
+                '_id': 0,
+                'course_code': course_code,
+                'course_name': course_name,
+                'total_students': 1,
+                'total_sessions': 1,
+                'total_attendance': 1,
+                'average_attendance': {
+                    '$cond': [
+                        {'$eq': ['$total_sessions', 0]},
+                        0,
+                        {
+                            '$multiply': [
+                                {
+                                    '$divide': [
+                                        '$total_attendance',
+                                        {'$multiply': ['$total_students', '$total_sessions']}
+                                    ]
+                                },
+                                100
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+   
+    result = list(get_mongo().db.student_courses.aggregate(pipeline))
+    return result[0] if result else None
