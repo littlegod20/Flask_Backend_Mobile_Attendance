@@ -1,6 +1,6 @@
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
-from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, set_student_location_controller, set_lecturer_location_controller, get_recent_attendance_controller)
+from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, set_student_location_controller, set_lecturer_location_controller, get_recent_attendance_controller, get_overall_attendance_controller)
 
 main = Blueprint('main', __name__)
 
@@ -69,8 +69,14 @@ def get_lecturer_courses():
     return get_lecturer_courses_controller()
 
 
-# route for recent attendance
+# route for recent attendance for student
 @main.route('/student/recent-attendance', methods=['GET'])
 @jwt_required()
 def get_recent_attendance():
     return get_recent_attendance_controller()
+
+# route for overall class attendance for lecturer
+@main.route('/lecturer/overall-attendance', methods=['GET'])
+@jwt_required()
+def get_overall_attendance():
+    return get_overall_attendance_controller()
