@@ -54,9 +54,10 @@ def manage_session_controller():
     course_code = request.json.get('course_code')
     action = request.json.get('action')
     course_name = request.json.get('course_name')
-    location = request.json.get('location'),
+    location = request.json.get('location')
+    perimeter = request.json.get('perimeter')
     if action == 'open':
-        open_session(user_id, course_code, course_name, location)
+        open_session(user_id, course_code, course_name, location, perimeter)
         return jsonify({"msg": "Session opened successfully"}), 200
     elif action == 'close':
         close_session(user_id, course_code, course_name, location)
@@ -91,11 +92,14 @@ def check_attendance_controller():
     # if get_attendance_checked(course_code, user_id):
     #     return jsonify({"msg": "Attendance already recorded for this session"}),
     
-    lecturer_location = get_lecturer_location(course_code)
-    if lecturer_location:
+    lecturer_data = get_lecturer_location(course_code)
+    if lecturer_data:
+        lecturer_location = lecturer_data["location"]
+        perimeter = lecturer_data["perimeter"]
+
         distance = calculate_distance(lecturer_location, location)
-        print('student:',location, '\nLecturer:',lecturer_location)
-        if distance <= 100: 
+        print('student:',location, '\nLecturer:',lecturer_data, '\ndistance:',distance)
+        if distance <= perimeter: 
             record_attendance(user_id, course_code, course_name, location, attendance_checked)
             return jsonify({"msg": "Attendance recorded successfully"}), 200
         else:

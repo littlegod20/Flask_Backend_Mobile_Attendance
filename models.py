@@ -143,13 +143,14 @@ def create_user(data):
     except Exception as e:
         return jsonify({"error": f'Failed to register face:{str(e)}'}), 400
 
-def open_session(user_id, course_code, course_name, location):
+def open_session(user_id, course_code, course_name, location, perimeter):
     get_mongo().db.sessions.insert_one({
         'lecturer_id': ObjectId(user_id),
         'course_code': course_code,
         'course_name': course_name,
         'timestamp': datetime.now(timezone.utc),
         'location': location,
+        'perimeter': perimeter,
         'active': True
     })
 
@@ -176,7 +177,11 @@ def set_lecturer_location(user_id, location):
 def get_lecturer_location(course_code): 
     session = get_mongo().db.sessions.find_one({'course_code':course_code, 'active': True})
     if session: 
-        return session['location'][0]
+        # session['location'][0]
+        return {
+            "location" : session.get("location"),
+            "perimeter": session.get("perimeter", 100) # Default to 100 if not set
+        }
     return None
 
 def set_student_location(user_id, location):
@@ -427,7 +432,7 @@ def calculate_distance(location1, location2):
     # location and location2 should be tuples like (latitude, longitude)
     tuple1 = tuple(location1.values())
     tuple2 = tuple(location2.values())
-    return geodesic(tuple1, tuple2)
+    return geodesic(tuple1, tuple2).meters
 
 
 def get_recent_attendance(user_id):
