@@ -1,8 +1,7 @@
 from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
-from bson import ObjectId
 from datetime import datetime, timezone, timedelta
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, set_student_location,  set_lecturer_location, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance)
 
 
 def index_controller():
@@ -66,16 +65,6 @@ def manage_session_controller():
         return jsonify({"msg": "Invalid action"}), 400
     
 
-def set_lecturer_location_controller():
-    user_id = get_jwt_identity()
-    user = get_user(user_id)
-    if user['role'] != 'lecturer':
-        return jsonify({"msg": "Unauthorized"}), 403
-    location = request.json.get('location')
-    set_lecturer_location(user_id, location)
-    return jsonify({"msg": "Lecturer location updated successfully"}), 200
-
-
 def check_attendance_controller():
     user_id = get_jwt_identity()
     user = get_user(user_id)
@@ -88,9 +77,6 @@ def check_attendance_controller():
 
     if not is_session_active(course_code):
         return jsonify({"msg": "No active session for this course"}), 400
-    
-    # if get_attendance_checked(course_code, user_id):
-    #     return jsonify({"msg": "Attendance already recorded for this session"}),
     
     lecturer_data = get_lecturer_location(course_code)
     if lecturer_data:
@@ -106,16 +92,6 @@ def check_attendance_controller():
             return jsonify({"msg": "You are not within the required location"}), 200
     else: 
         return jsonify({"msg": "Lecturer location not set"}), 400
-
-
-def set_student_location_controller():
-    user_id = get_jwt_identity()
-    user = get_user(user_id)
-    if user['role'] != 'student':
-        return jsonify({"msg": "Unauthorized"}), 403
-    location = request.json.get('location')
-    set_student_location(user_id, location)
-    return jsonify({"msg": "Student location updated successfully"}), 200
 
 
 def get_student_attendance_controller():

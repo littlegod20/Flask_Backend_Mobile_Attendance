@@ -168,12 +168,6 @@ def close_session(user_id, course_code, course_name, location):
         }
     )
 
-def set_lecturer_location(user_id, location):
-    get_mongo().db.users.update_one(
-        {'_id': ObjectId(user_id)},
-        {'$set': {'location': json.dumps(location)}}
-    )
-
 def get_lecturer_location(course_code): 
     session = get_mongo().db.sessions.find_one({'course_code':course_code, 'active': True})
     if session: 
@@ -184,11 +178,6 @@ def get_lecturer_location(course_code):
         }
     return None
 
-def set_student_location(user_id, location):
-    get_mongo().db.users.update_one(
-        {'_id': ObjectId(user_id)},
-        {'$set': {'location': location}}
-    )
 
 def is_session_active(course_code):
     return get_mongo().db.sessions.find_one({'course_code': course_code, 'active': True}) is not None
