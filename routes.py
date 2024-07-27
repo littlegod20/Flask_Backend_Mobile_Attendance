@@ -1,3 +1,4 @@
+# routes.py
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
 from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, get_recent_attendance_controller, get_overall_attendance_controller)

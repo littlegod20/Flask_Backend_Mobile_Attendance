@@ -1,3 +1,4 @@
+# models.py
 import json
 from flask import current_app
 from bson import ObjectId
@@ -9,6 +10,8 @@ import dlib
 from scipy.spatial.distance import cosine
 from deepface import DeepFace
 from flask import jsonify
+from matplotlib import pyplot as plt
+from PIL import Image, ImageFilter
 
 
 def get_mongo():
@@ -65,7 +68,7 @@ model_name = 'VGG-Face'
 # Initialize dlib's face detector
 detector = dlib.get_frontal_face_detector()
 
-def preprocess_image(image):
+def preprocess_image(image, save_path=None):
     # Convert to RGB
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
@@ -73,6 +76,7 @@ def preprocess_image(image):
     faces = detector(rgb_image)
     
     if len(faces) == 0:
+        print("No face detected")
         return None
     
     # Get the first face
@@ -80,17 +84,26 @@ def preprocess_image(image):
     x, y, w, h = (face.left(), face.top(), face.width(), face.height())
     
     # Crop the face
-    face = image[y:y+h, x:x+w]
+    cropped_face = image[y:y+h, x:x+w]
     
     # Resize to a standard size (e.g., 224x224 for VGG-Face)
-    face = cv2.resize(face, (224, 224))
+    preprocessed_image = cv2.resize(cropped_face, (224, 224))
+
+     # Save or display the image if a save path is provided
+    if save_path:
+        cv2.imwrite(save_path, preprocessed_image)
+    else:
+        # Display the image using matplotlib
+        plt.imshow(cv2.cvtColor(preprocessed_image, cv2.COLOR_BGR2RGB))
+        plt.axis('off')
+        plt.show()
     
-    return face
+    return preprocessed_image
 
 def extract_features(face_img):
     preprocessed_face = preprocess_image(face_img)
     if preprocessed_face is None:
-        raise ValueError("No face detected in the image")
+        return False,"No face detected in the image"
     
     result = DeepFace.represent(preprocessed_face, model_name=model_name, enforce_detection=False)
     # The result is now a list of dictionaries, we'll take the first one
@@ -182,7 +195,7 @@ def get_lecturer_location(course_code):
 def is_session_active(course_code):
     return get_mongo().db.sessions.find_one({'course_code': course_code, 'active': True}) is not None
 
-def record_attendance(user_id, course_code,course_name, location, attendance_checked):
+def record_attendance(user_id, course_code,course_name, location, attendance_checked, image):
 
     # Get the current active session for this course
     session = get_mongo().db.sessions.find_one({
@@ -191,24 +204,52 @@ def record_attendance(user_id, course_code,course_name, location, attendance_che
     })
 
     if not session:
-        raise ValueError("No active session for this course")
+        return False, "No active session for this course"
+    
+    try:
+        input_features = extract_features(image)
+        user = get_mongo().db.users.find_one({'_id':ObjectId(user_id)})
+        # print(f'found user: {user}')
 
-    # Record attendance
-    get_mongo().db.attendance.insert_one({
-        'student_id': ObjectId(user_id),
-        'course_code': course_code,
-        'course_name': course_name,
-        'session_id': session['_id'], # Linking the attendance to the specific session
-        'timestamp': datetime.now(timezone.utc),
-        'location': location,
-        'attendance_checked': attendance_checked
-    })
+        if not user:
+            return False, "User not found"
 
-     # Update the student's course data
-    get_mongo().db.student_courses.update_one(
-        {'student_id': ObjectId(user_id), 'courses.course_code': course_code},
-        {'$set': {'courses.$.attendance_checked': attendance_checked}}
-    )
+        stored_features = np.array(user['face_features'])
+        similarity = 1 - cosine(input_features, stored_features)
+        print(f'Similarity:{similarity:.2f}')
+
+        # I'll adjust the threshold if needed
+        if similarity > 0.6:
+            # Face recognized, record attendance
+            attendance_record = {
+                'student_id': ObjectId(user_id),
+                'course_code': course_code,
+                'course_name': course_name,
+                'session_id': session['_id'],
+                'timestamp': datetime.now(timezone.utc),
+                'location': location,
+                'attendance_checked': attendance_checked,
+                'face_recognized': True,
+                'face_similarity': float(similarity)
+            }
+        
+            get_mongo().db.attendance.insert_one(attendance_record)
+
+            # Update the student's course data
+            get_mongo().db.student_courses.update_one(
+                {'student_id': ObjectId(user_id), 'courses.course_code': course_code},
+                {'$set': {'courses.$.attendance_checked': attendance_checked}}
+            )
+            return True, f"Attendance recorded successfully."
+        else:
+            # Face not recognized
+            return False, f"Face not recognized. Similarity: {similarity:.2f}"
+    except ValueError as ve:
+        print(f"ValueError in record_attendance: {str(ve)}")
+        return False, f'ValueError: {str(ve)}'
+    except Exception as e:
+        print(f"Exception in record_attendance: {str(e)}")
+        return False, f"Failed to record attendance:{str(e)}"
 
 def get_weekly_attendance(user_id, course_code):
     semester_start_date = datetime(2024, 5, 12)
