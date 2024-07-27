@@ -1,6 +1,11 @@
+# controllers.py
+import json
+import cv2
 from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from datetime import datetime, timezone, timedelta
+
+import numpy as np
 from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance)
 
 
@@ -69,11 +74,25 @@ def check_attendance_controller():
     user_id = get_jwt_identity()
     user = get_user(user_id)
     if user['role'] != 'student':
-        return jsonify({"msg": "Unauthorized"}), 403
-    course_code = request.json.get('course_code')
-    course_name = request.json.get('course_name')
-    location = request.json.get('location')
-    attendance_checked = request.json.get('attendance_checked', False)
+        return jsonify({"msg": "Unauthorized"}), 403 
+    # return jsonify({'msg':request.form})
+    course_code = request.form.get('course_code')
+    course_name = request.form.get('course_name')
+    location_str = request.form.get('location')
+    location = json.loads(location_str)
+
+    try:
+        location = json.loads(location_str)
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")  # Print the error message for debugging
+        return jsonify({"msg": "Invalid JSON format"}), 400
+
+    attendance_checked = request.form.get('attendance_checked', False)
+
+    if 'image' not in request.files:
+        return jsonify({"msg": "No image file"}), 400
+
+    image = cv2.imdecode(np.frombuffer(request.files['image'].read(), np.uint8), cv2.IMREAD_COLOR)
 
     if not is_session_active(course_code):
         return jsonify({"msg": "No active session for this course"}), 400
@@ -86,8 +105,11 @@ def check_attendance_controller():
         distance = calculate_distance(lecturer_location, location)
         print('student:',location, '\nLecturer:',lecturer_data, '\ndistance:',distance)
         if distance <= perimeter: 
-            record_attendance(user_id, course_code, course_name, location, attendance_checked)
-            return jsonify({"msg": "Attendance recorded successfully"}), 200
+           success, message = record_attendance(user_id, course_code, course_name, location, attendance_checked, image)
+           if success:
+                return jsonify({"msg":message}), 200
+           else: 
+            return jsonify({"msg":message}), 400
         else:
             return jsonify({"msg": "You are not within the required location"}), 200
     else: 

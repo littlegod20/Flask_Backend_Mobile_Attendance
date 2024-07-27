@@ -157,3 +157,7 @@ $RECYCLE.BIN/
 
 # Virtual Environments
 venv/
+
+
+# shape_predictor
+shape_predictor_68_face_landmarks.dat
