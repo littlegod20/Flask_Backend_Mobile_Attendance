@@ -417,3 +417,53 @@
 # #         return jsonify({"message": "No courses found"}), 404
 
 # #     return jsonify({"courses": courses})
+
+
+
+
+
+
+# sessions = {}
+
+#     @socketio.on('liveness_frame')
+#     def handle_liveness_frame(data):
+#         print("Received frame for processing")
+#         # Convert base64 data to numpy array
+#         frame = cv2.imdecode(np.frombuffer(data['frame'], np.uint8), cv2.IMREAD_COLOR)
+        
+#         # Get user's session (you need to implement session management)
+#         session = get_user_session(request.sid)
+#         session['frames'].append(frame)
+#         session['frames'] = session['frames'][-FRAME_HISTORY:]  # Keep only recent frames
+
+#         # Perform detections
+#         blinks = detect_blinks(session['frames'])
+#         head_movements = detect_head_movements(session['frames'])
+
+#         # Update counts
+#         session['blink_count'] += blinks
+#         session['head_movement_count'] += head_movements
+
+#         # Check if liveness criteria are met
+#         if session['blink_count'] >= REQUIRED_BLINKS and session['head_movement_count'] >= REQUIRED_HEAD_MOVEMENTS:
+#             emit('liveness_result', {
+#                 'complete': True,
+#                 'success': True,
+#                 'message': 'Liveness check passed'
+#             })
+#         else:
+#             # Send intermediate results
+#             emit('liveness_result', {
+#                 'complete': False,
+#                 'blinks': session['blink_count'],
+#                 'headMovements': session['head_movement_count']
+#             })
+
+#     def get_user_session(sid):
+#         if sid not in sessions:
+#             sessions[sid] = {
+#                 'frames': [],
+#                 'blink_count': 0,
+#                 'head_movement_count': 0
+#             }
+#         return sessions[sid]

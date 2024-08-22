@@ -5,11 +5,10 @@ from flask_pymongo import PyMongo
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from routes import main
-from flask_socketio import SocketIO
 
 def create_app():
     app = Flask(__name__)
-    CORS(app)
+    CORS(app, resources={r"/*":{"origins":"*"}}, supports_credentials=True)
     bcrypt = Bcrypt(app)
     app.bcrypt = bcrypt
 
@@ -26,16 +25,11 @@ def create_app():
 
     app.register_blueprint(main)
 
-    # Initialize SocketIO
-    socketio = SocketIO(app, cors_allowed_origins="*")
-    app.socketio = socketio 
 
-    return app, socketio
+    return app
 
-app, socketio = create_app()
+app= create_app()
 
-# Import WebSocket routes
-from websocket_routes import *
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port='8000', debug=True)
+    app.run(host='0.0.0.0', port='8000', debug=True)
