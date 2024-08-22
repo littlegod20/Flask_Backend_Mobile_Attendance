@@ -1,5 +1,4 @@
 # models.py
-import json
 from flask import current_app
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -11,7 +10,6 @@ from scipy.spatial.distance import cosine
 from deepface import DeepFace
 from flask import jsonify
 from matplotlib import pyplot as plt
-from PIL import Image, ImageFilter
 
 
 def get_mongo():
