@@ -4,9 +4,11 @@ import cv2
 from flask import  request, jsonify
 from flask_jwt_extended import get_jwt_identity, create_access_token
 from datetime import datetime, timezone, timedelta
+from bson import ObjectId
+import os
 
 import numpy as np
-from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance)
+from models import (get_user, get_recent_sessions, get_recent_checkins, create_user,open_session, close_session, record_attendance, get_weekly_attendance,get_student_attendance, get_courses, is_session_active, check_password, get_session_status, get_lecturer_location, calculate_distance, check_attendance_status, get_recent_attendance, get_overall_class_attendance, evaluate_model)
 
 
 def index_controller():
@@ -89,10 +91,13 @@ def check_attendance_controller():
 
     attendance_checked = request.form.get('attendance_checked', False)
 
-    if 'image' not in request.files:
-        return jsonify({"msg": "No image file"}), 400
 
-    image = cv2.imdecode(np.frombuffer(request.files['image'].read(), np.uint8), cv2.IMREAD_COLOR)
+    # image is optional
+    image = None
+    if 'image' in request.files:
+        image_file = request.files['image']
+        image = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
+
 
     if not is_session_active(course_code):
         return jsonify({"msg": "No active session for this course"}), 400
@@ -203,3 +208,52 @@ def get_overall_attendance_controller():
         else:
             return jsonify({"msg":"No overall attendance for this course"})
     return jsonify(attendance)
+
+
+
+
+def load_test_data(test_data_dir):
+    test_images = []
+    test_labels = []
+    user_ids = []
+
+    recognized_dir = os.path.join(test_data_dir, 'recognized')
+    unrecognized_dir = os.path.join(test_data_dir, 'unrecognized')
+
+    # Load recognized faces
+    for user_id in os.listdir(recognized_dir):
+        user_dir = os.path.join(recognized_dir, user_id)
+        if os.path.isdir(user_dir):
+            for image_file in os.listdir(user_dir):
+                image_path = os.path.join(user_dir, image_file)
+                image = cv2.imread(image_path)
+                if image is not None:
+                    test_images.append(image)
+                    test_labels.append(True)
+                    user_ids.append(user_id)
+
+    # Load unrecognized faces
+    for image_file in os.listdir(unrecognized_dir):
+        image_path = os.path.join(unrecognized_dir, image_file)
+        image = cv2.imread(image_path)
+        if image is not None:
+            test_images.append(image)
+            test_labels.append(False)
+            user_ids.append(None)  # No user ID for unrecognized faces
+
+    return test_images, test_labels, user_ids
+
+
+
+# In your controller or a separate evaluation script
+def evaluate_facial_recognition():
+    test_data_dir = './test_data'
+    test_images, test_labels, user_ids = load_test_data(test_data_dir)
+    
+    results = evaluate_model(test_images, test_labels, user_ids)
+    
+    print(f"Accuracy: {results['accuracy']:.2f}")
+    print(f"Precision: {results['precision']:.2f}")
+    print(f"Recall: {results['recall']:.2f}")
+
+    return results
