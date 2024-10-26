@@ -1,7 +1,8 @@
 # routes.py
 from flask import Blueprint
 from flask_jwt_extended import jwt_required
-from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, get_recent_attendance_controller, get_overall_attendance_controller)
+from controllers import (index_controller, register_controller, login_controller, manage_session_controller, check_attendance_controller,get_student_attendance_controller, get_lecturer_attendance_controller,get_student_courses_controller, get_lecturer_courses_controller, get_recent_attendance_controller, get_overall_attendance_controller, evaluate_facial_recognition)
+from flask import jsonify
 
 main = Blueprint('main', __name__)
 
@@ -70,3 +71,11 @@ def get_recent_attendance():
 @jwt_required()
 def get_overall_attendance():
     return get_overall_attendance_controller()
+
+
+# evaluation route
+@main.route('/evaluate_model', methods=['GET'])
+@jwt_required()
+def evaluate_model_endpoint():
+    results = evaluate_facial_recognition()
+    return jsonify(results)

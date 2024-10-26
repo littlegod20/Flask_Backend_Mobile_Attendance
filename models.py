@@ -10,6 +10,8 @@ from scipy.spatial.distance import cosine
 from deepface import DeepFace
 from flask import jsonify
 from matplotlib import pyplot as plt
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+import numpy as np
 
 
 def get_mongo():
@@ -88,13 +90,13 @@ def preprocess_image(image, save_path=None):
     preprocessed_image = cv2.resize(cropped_face, (224, 224))
 
      # Save or display the image if a save path is provided
-    if save_path:
-        cv2.imwrite(save_path, preprocessed_image)
-    else:
-        # Display the image using matplotlib
-        plt.imshow(cv2.cvtColor(preprocessed_image, cv2.COLOR_BGR2RGB))
-        plt.axis('off')
-        plt.show()
+    # if save_path:
+    #     cv2.imwrite(save_path, preprocessed_image)
+    # else:
+    #     # Display the image using matplotlib
+    #     plt.imshow(cv2.cvtColor(preprocessed_image, cv2.COLOR_BGR2RGB))
+    #     plt.axis('off')
+    #     plt.show()
     
     return preprocessed_image
 
@@ -205,43 +207,49 @@ def record_attendance(user_id, course_code,course_name, location, attendance_che
         return False, "No active session for this course"
     
     try:
-        input_features = extract_features(image)
+        # input_features = extract_features(image)
         user = get_mongo().db.users.find_one({'_id':ObjectId(user_id)})
         # print(f'found user: {user}')
 
         if not user:
             return False, "User not found"
-
-        stored_features = np.array(user['face_features'])
-        similarity = 1 - cosine(input_features, stored_features)
-        print(f'Similarity:{similarity:.2f}')
-
-        # I'll adjust the threshold if needed
-        if similarity > 0.6:
-            # Face recognized, record attendance
-            attendance_record = {
-                'student_id': ObjectId(user_id),
-                'course_code': course_code,
-                'course_name': course_name,
-                'session_id': session['_id'],
-                'timestamp': datetime.now(timezone.utc),
-                'location': location,
-                'attendance_checked': attendance_checked,
-                'face_recognized': True,
-                'face_similarity': float(similarity)
-            }
         
-            get_mongo().db.attendance.insert_one(attendance_record)
+        face_recognized = False
+        similarity = None
 
-            # Update the student's course data
-            get_mongo().db.student_courses.update_one(
-                {'student_id': ObjectId(user_id), 'courses.course_code': course_code},
-                {'$set': {'courses.$.attendance_checked': attendance_checked}}
-            )
-            return True, f"Attendance recorded successfully."
-        else:
-            # Face not recognized
-            return False, f"Face not recognized. Similarity: {similarity:.2f}"
+        if image is not None:
+            input_features = extract_features(image)
+            stored_features = np.array(user['face_features'])
+            similarity = 1 - cosine(input_features, stored_features)
+            print(f'Similarity:{similarity:.2f}')
+
+            # If face is not recognized, return error
+            if similarity <= 0.6:
+                return False, f"Face not recognized. Similarity: {similarity:.2f}"
+            
+            face_recognized = True
+
+        # Face recognized, record attendance
+        attendance_record = {
+            'student_id': ObjectId(user_id),
+            'course_code': course_code,
+            'course_name': course_name,
+            'session_id': session['_id'],
+            'timestamp': datetime.now(timezone.utc),
+            'location': location,
+            'attendance_checked': attendance_checked,
+            'face_recognized': face_recognized,
+            'face_similarity': float(similarity) if image is not None else None
+        }
+        
+        get_mongo().db.attendance.insert_one(attendance_record)
+
+        # Update the student's course data
+        get_mongo().db.student_courses.update_one(
+            {'student_id': ObjectId(user_id), 'courses.course_code': course_code},
+            {'$set': {'courses.$.attendance_checked': attendance_checked}}
+        )
+        return True, f"Attendance recorded successfully."
     except ValueError as ve:
         print(f"ValueError in record_attendance: {str(ve)}")
         return False, f'ValueError: {str(ve)}'
@@ -678,3 +686,62 @@ def get_overall_class_attendance(course_code, course_name):
    
     result = list(get_mongo().db.student_courses.aggregate(pipeline))
     return result[0] if result else None
+
+
+# Evaluating my facial recognition model
+def evaluate_model(test_images, test_labels, user_ids):
+    predictions = []
+    true_labels = []
+    
+    print(f"Total test cases: {len(test_images)}")
+    
+    for i, (image, label, user_id) in enumerate(zip(test_images, test_labels, user_ids)):
+        print(f"\nProcessing image {i+1}")
+        print(f"Label: {label}, User ID: {user_id}")
+        
+        # Use your existing functions to process the image and compare
+        input_features = extract_features(image)
+        if input_features is False:
+            print("No face detected in image")
+            continue  # Skip images where no face is detected
+        
+        if user_id is not None:
+            try:
+                user_id_obj = ObjectId(user_id)
+                user = get_mongo().db.users.find_one({'_id': user_id_obj})
+                if not user:
+                    print(f'User with ID {user_id} not found in database')
+                    continue  # Skip if user not found
+                
+                stored_features = np.array(user['face_features'])
+                similarity = 1 - cosine(input_features, stored_features)
+                
+                print(f"Similarity: {similarity}")
+                
+                # Use the same threshold as in your record_attendance function
+                prediction = similarity > 0.6
+            except Exception as e:
+                print(f"Error processing user {user_id}: {str(e)}")
+                continue
+        else:
+            # For unrecognized faces, always predict False
+            prediction = False
+        
+        predictions.append(prediction)
+        true_labels.append(label)
+    
+    print(f"\nTotal processed cases: {len(predictions)}")
+    
+    # Calculate metrics
+    if len(predictions) > 0:
+        precision, recall, _, _ = precision_recall_fscore_support(true_labels, predictions, average='binary')
+        accuracy = accuracy_score(true_labels, predictions)
+    else:
+        print("No valid predictions made")
+        return {'accuracy': 0, 'precision': 0, 'recall': 0}
+    
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall
+    }
