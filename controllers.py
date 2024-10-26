@@ -116,6 +116,7 @@ def check_attendance_controller():
            else: 
             return jsonify({"msg":message}), 400
         else:
+            print('You are not within the required location')
             return jsonify({"msg": "You are not within the required location"}), 200
     else: 
         return jsonify({"msg": "Lecturer location not set"}), 400
